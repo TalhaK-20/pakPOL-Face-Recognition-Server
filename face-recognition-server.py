@@ -3,7 +3,9 @@ from flask import Flask, request, jsonify
 from deepface import DeepFace
 import cv2
 
+
 app = Flask(__name__)
+
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 if not os.path.exists(UPLOAD_FOLDER):
