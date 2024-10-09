@@ -1,30 +1,35 @@
 import os
+import cv2
+import requests
 from flask import Flask, request, jsonify
 from deepface import DeepFace
-import cv2
-
+import numpy as np
 
 app = Flask(__name__)
 
 
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+def get_image_from_url(image_url):
+    try:
+        response = requests.get(image_url)
+        img_array = np.asarray(bytearray(response.content), dtype=np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        if img is None:
+            raise ValueError(f"Unable to load image from {image_url}")
+        return img
+
+    except Exception as e:
+        print(f"Error downloading image from URL: {e}")
+        raise ValueError(f"Error downloading image: {str(e)}")
 
 
 @app.route('/extract-embedding', methods=['POST'])
 def extract_embedding():
-
     data = request.json
-    image_name = data['image_path']
-    image_path = os.path.join(UPLOAD_FOLDER, image_name)
+    image_url = data['image_url']
 
     try:
-
-        if not os.path.exists(image_path):
-            raise ValueError(f"Image not found at {image_path}")
-
-        embedding = DeepFace.represent(img_path=image_path, model_name="VGG-Face")[0]["embedding"]
+        img = get_image_from_url(image_url)
+        embedding = DeepFace.represent(img_path=img, model_name="VGG-Face")[0]["embedding"]
         return jsonify({'embedding': embedding}), 200
 
     except Exception as e:
@@ -34,20 +39,11 @@ def extract_embedding():
 
 @app.route('/detect-face', methods=['POST'])
 def detect_face():
-
     data = request.json
-    image_name = data['image_path']
-    image_path = os.path.join(UPLOAD_FOLDER, image_name)
+    image_url = data['image_url']
 
     try:
-        if not os.path.exists(image_path):
-            raise ValueError(f"Image not found at {image_path}")
-
-        img = cv2.imread(image_path)
-
-        if img is None:
-            raise ValueError(f"Unable to load image from {image_path}")
-
+        img = get_image_from_url(image_url)
         face_objs = DeepFace.extract_faces(img, detector_backend='opencv', enforce_detection=False)
         face_count = len(face_objs) if isinstance(face_objs, list) else 0
         return jsonify({'face_count': face_count}), 200
