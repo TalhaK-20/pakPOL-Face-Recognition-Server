@@ -1,54 +1,60 @@
 import os
-import cv2
-import requests
 from flask import Flask, request, jsonify
 from deepface import DeepFace
-import numpy as np
-from io import BytesIO
+import cv2
+
 
 app = Flask(__name__)
 
 
-def get_image_from_url(image_url):
-    global response, img_data
-    try:
-        response = requests.get(image_url, stream=True)
-        img_data = BytesIO(response.content)
-        img_array = np.asarray(bytearray(img_data.read()), dtype=np.uint8)
-        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-        if img is None:
-            raise ValueError(f"Unable to load image from {image_url}")
-        return img
-    finally:
-        response.close()
-        img_data.close()
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 
 @app.route('/extract-embedding', methods=['POST'])
 def extract_embedding():
+
     data = request.json
-    image_url = data['image_url']
+    image_name = data['image_path']
+    image_path = os.path.join(UPLOAD_FOLDER, image_name)
 
     try:
-        img = get_image_from_url(image_url)
-        embedding = DeepFace.represent(img_path=img, model_name="VGG-Face")[0]["embedding"]
+
+        if not os.path.exists(image_path):
+            raise ValueError(f"Image not found at {image_path}")
+
+        embedding = DeepFace.represent(img_path=image_path, model_name="VGG-Face")[0]["embedding"]
         return jsonify({'embedding': embedding}), 200
-    finally:
-        del img
+
+    except Exception as e:
+        print(f"Error extracting face embedding: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/detect-face', methods=['POST'])
 def detect_face():
+
     data = request.json
-    image_url = data['image_url']
+    image_name = data['image_path']
+    image_path = os.path.join(UPLOAD_FOLDER, image_name)
 
     try:
-        img = get_image_from_url(image_url)
+        if not os.path.exists(image_path):
+            raise ValueError(f"Image not found at {image_path}")
+
+        img = cv2.imread(image_path)
+
+        if img is None:
+            raise ValueError(f"Unable to load image from {image_path}")
+
         face_objs = DeepFace.extract_faces(img, detector_backend='opencv', enforce_detection=False)
         face_count = len(face_objs) if isinstance(face_objs, list) else 0
         return jsonify({'face_count': face_count}), 200
-    finally:
-        del img
+
+    except Exception as e:
+        print(f"Error detecting face: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
